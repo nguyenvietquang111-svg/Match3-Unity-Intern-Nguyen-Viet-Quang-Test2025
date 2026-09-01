@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -48,11 +48,11 @@ public class BonusItem : Item
         return it != null && it.ItemType == this.ItemType;
     }
 
-    internal override void ExplodeView()
+    internal override void ExplodeView(Action onComplete = null)
     {
         ActivateBonus();
 
-        base.ExplodeView();
+        base.ExplodeView(onComplete);
     }
 
     private void ActivateBonus()

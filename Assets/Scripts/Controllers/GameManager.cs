@@ -1,4 +1,4 @@
-﻿using DG.Tweening;
+using DG.Tweening;
 using System;
 using System.Collections;
 using UnityEngine;
@@ -47,6 +47,10 @@ public class GameManager : MonoBehaviour
 
     public eLevelMode CurrentMode { get; private set; } = eLevelMode.NORMAL;
 
+    public int CurrentRound { get; private set; } = 1;
+    public int CurrentBoardSizeX { get; private set; } = 4;
+    public int CurrentBoardSizeY { get; private set; } = 6;
+
     private GameSettings m_gameSettings;
     private BoardController m_boardController;
     private UIMainManager m_uiMenu;
@@ -55,6 +59,9 @@ public class GameManager : MonoBehaviour
 
     private void Awake()
     {
+        Application.targetFrameRate = 60;
+        QualitySettings.vSyncCount = 0;
+
         State = eStateGame.SETUP;
 
         m_gameSettings = Resources.Load<GameSettings>(Constants.GAME_SETTINGS_PATH);
@@ -87,13 +94,70 @@ public class GameManager : MonoBehaviour
 
     public void LoadLevel(eLevelMode mode)
     {
+        // Start fresh run at base round and dimensions
+        CurrentRound = 1;
+        CurrentBoardSizeX = m_gameSettings != null ? m_gameSettings.BoardSizeX : 4;
+        CurrentBoardSizeY = m_gameSettings != null ? m_gameSettings.BoardSizeY : 6;
+
+        LoadLevelInternal(mode);
+    }
+
+    public void ContinueToNextRound()
+    {
+        if (CurrentBoardSizeX < 32 || CurrentBoardSizeY < 32)
+        {
+            // Alternating progression: Odd round increases column, Even round increases row
+            if (CurrentRound % 2 == 1)
+            {
+                CurrentBoardSizeX = Mathf.Min(32, CurrentBoardSizeX + 1);
+            }
+            else
+            {
+                CurrentBoardSizeY = Mathf.Min(32, CurrentBoardSizeY + 1);
+            }
+
+            CurrentRound++;
+        }
+
+        LoadLevelInternal(CurrentMode);
+    }
+
+    public void GetNextRoundDimensions(out int nextX, out int nextY)
+    {
+        nextX = CurrentBoardSizeX;
+        nextY = CurrentBoardSizeY;
+
+        if (CurrentBoardSizeX >= 32 && CurrentBoardSizeY >= 32)
+        {
+            return;
+        }
+
+        if (CurrentRound % 2 == 1)
+        {
+            nextX = Mathf.Min(32, nextX + 1);
+        }
+        else
+        {
+            nextY = Mathf.Min(32, nextY + 1);
+        }
+    }
+
+    private void LoadLevelInternal(eLevelMode mode)
+    {
         ClearLevel();
 
         Result = eGameResult.NONE;
         CurrentMode = mode;
 
         m_boardController = new GameObject("BoardController").AddComponent<BoardController>();
-        m_boardController.StartGame(this, m_gameSettings, mode, m_uiMenu != null ? m_uiMenu.GetLevelConditionView() : null);
+        m_boardController.StartGame(
+            this,
+            m_gameSettings,
+            mode,
+            m_uiMenu != null ? m_uiMenu.GetLevelConditionView() : null,
+            CurrentBoardSizeX,
+            CurrentBoardSizeY,
+            CurrentRound);
 
         SetState(eStateGame.GAME_STARTED);
     }

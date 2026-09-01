@@ -1,4 +1,4 @@
-﻿using DG.Tweening;
+using DG.Tweening;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,8 +22,11 @@ public class BoardController : MonoBehaviour
     private float m_timeLeft;
     private Queue<Cell> m_autoplayPlan = new Queue<Cell>();
     private Coroutine m_autoCoroutine;
+    private int m_sizeX;
+    private int m_sizeY;
+    private int m_round;
 
-    public void StartGame(GameManager gameManager, GameSettings gameSettings, GameManager.eLevelMode mode, Text statusText)
+    public void StartGame(GameManager gameManager, GameSettings gameSettings, GameManager.eLevelMode mode, Text statusText, int sizeX = 0, int sizeY = 0, int round = 1)
     {
         m_gameManager = gameManager;
         m_gameSettings = gameSettings;
@@ -31,12 +34,18 @@ public class BoardController : MonoBehaviour
         m_statusText = statusText;
         m_cam = Camera.main;
 
-        m_board = new Board(transform, gameSettings);
+        m_sizeX = sizeX > 0 ? sizeX : (gameSettings != null ? gameSettings.BoardSizeX : 4);
+        m_sizeY = sizeY > 0 ? sizeY : (gameSettings != null ? gameSettings.BoardSizeY : 6);
+        m_round = round;
+
+        m_board = new Board(transform, gameSettings, m_sizeX, m_sizeY);
         m_autoplayPlan = BuildAutoplayPlan();
 
         if (m_mode == GameManager.eLevelMode.TIME_ATTACK)
         {
-            m_timeLeft = gameSettings.LevelTime > 0f ? gameSettings.LevelTime : 60f;
+            int totalTiles = m_sizeX * m_sizeY;
+            float baseTime = gameSettings.LevelTime > 0f ? gameSettings.LevelTime : 60f;
+            m_timeLeft = totalTiles > 24 ? baseTime + (totalTiles - 24) * 1.5f : baseTime;
         }
 
         UpdateStatusText();
@@ -229,7 +238,7 @@ public class BoardController : MonoBehaviour
         IsBusy = true;
         OnMoveEvent();
 
-        m_board.MoveBoardItemToBottom(boardCell, bottomCell, 0.25f, () =>
+        m_board.MoveBoardItemToBottom(boardCell, bottomCell, 0.28f, () =>
         {
             StartCoroutine(ResolveAfterMoveCoroutine(item.ItemType));
         });
@@ -246,15 +255,18 @@ public class BoardController : MonoBehaviour
         IsBusy = true;
         OnMoveEvent();
 
-        m_board.MoveBottomItemToBoard(bottomCell, homeCell, 0.25f, () =>
+        m_board.MoveBottomItemToBoard(bottomCell, homeCell, 0.28f, () =>
         {
-            StartCoroutine(ResolveAfterMoveCoroutine(null));
+            m_board.CompactBottomTray(0.18f, () =>
+            {
+                StartCoroutine(ResolveAfterMoveCoroutine(null));
+            });
         });
     }
 
     private IEnumerator ResolveAfterMoveCoroutine(NormalItem.eNormalType? movedType)
     {
-        yield return new WaitForSeconds(0.05f);
+        yield return new WaitForSeconds(0.02f);
 
         if (movedType.HasValue)
         {
@@ -262,10 +274,18 @@ public class BoardController : MonoBehaviour
                 .Where(x => x.Item is NormalItem normal && normal.ItemType == movedType.Value)
                 .ToList();
 
-            if (matchingCells.Count == 3)
+            if (matchingCells.Count >= 3)
             {
-                m_board.ClearBottomCellsOfType(movedType.Value);
-                yield return new WaitForSeconds(0.25f);
+                bool clearFinished = false;
+                m_board.ClearBottomCellsOfType(movedType.Value, () =>
+                {
+                    clearFinished = true;
+                });
+
+                while (!clearFinished)
+                {
+                    yield return null;
+                }
             }
         }
         else
@@ -276,10 +296,18 @@ public class BoardController : MonoBehaviour
                     .Where(x => x.Item is NormalItem normal && normal.ItemType == type)
                     .ToList();
 
-                if (matchingCells.Count == 3)
+                if (matchingCells.Count >= 3)
                 {
-                    m_board.ClearBottomCellsOfType(type);
-                    yield return new WaitForSeconds(0.25f);
+                    bool clearFinished = false;
+                    m_board.ClearBottomCellsOfType(type, () =>
+                    {
+                        clearFinished = true;
+                    });
+
+                    while (!clearFinished)
+                    {
+                        yield return null;
+                    }
                     break;
                 }
             }
@@ -366,22 +394,31 @@ public class BoardController : MonoBehaviour
                 break;
         }
 
+        int maxBoardItems = m_sizeX * m_sizeY;
+        int activeSpawns = maxBoardItems - (maxBoardItems % 3);
+
         if (m_mode == GameManager.eLevelMode.TIME_ATTACK)
         {
-            m_statusText.text = string.Format("{0}\nTime: {1:00}\nBoard: {2}/{4}\nBottom: {3}/5",
+            m_statusText.text = string.Format("{0} (R{1}: {4}x{5})\nTime: {2:00}\nBoard: {3}/{6}\nBottom: {7}/5",
                 modeName,
+                m_round,
                 Mathf.CeilToInt(m_timeLeft),
                 m_board.GetBoardItemCount(),
-                m_board.GetBottomItemCount(),
-                m_gameSettings.BoardSizeX * m_gameSettings.BoardSizeY);
+                m_sizeX,
+                m_sizeY,
+                activeSpawns,
+                m_board.GetBottomItemCount());
         }
         else
         {
-            m_statusText.text = string.Format("{0}\nBoard: {1}/{3}\nBottom: {2}/5",
+            m_statusText.text = string.Format("{0} (R{1}: {3}x{4})\nBoard: {2}/{5}\nBottom: {6}/5",
                 modeName,
+                m_round,
                 m_board.GetBoardItemCount(),
-                m_board.GetBottomItemCount(),
-                m_gameSettings.BoardSizeX * m_gameSettings.BoardSizeY);
+                m_sizeX,
+                m_sizeY,
+                activeSpawns,
+                m_board.GetBottomItemCount());
         }
     }
 

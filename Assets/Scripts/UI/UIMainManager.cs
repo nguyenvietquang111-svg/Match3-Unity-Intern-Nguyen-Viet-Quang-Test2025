@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -152,6 +152,38 @@ public class UIMainManager : MonoBehaviour
         }
 
         m_gameManager.SetState(GameManager.eStateGame.GAME_STARTED);
+    }
+
+    internal void ContinueToNextRound()
+    {
+        if (m_gameManager != null)
+        {
+            m_gameManager.ContinueToNextRound();
+        }
+    }
+
+    internal int GetCurrentRound()
+    {
+        return m_gameManager != null ? m_gameManager.CurrentRound : 1;
+    }
+
+    internal void GetCurrentDimensions(out int curX, out int curY)
+    {
+        curX = m_gameManager != null ? m_gameManager.CurrentBoardSizeX : 4;
+        curY = m_gameManager != null ? m_gameManager.CurrentBoardSizeY : 6;
+    }
+
+    internal void GetNextRoundDimensions(out int nextX, out int nextY)
+    {
+        if (m_gameManager != null)
+        {
+            m_gameManager.GetNextRoundDimensions(out nextX, out nextY);
+        }
+        else
+        {
+            nextX = 4;
+            nextY = 6;
+        }
     }
 
     private void ShowGameResult()

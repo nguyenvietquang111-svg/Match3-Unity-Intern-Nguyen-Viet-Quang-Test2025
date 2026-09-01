@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,6 +13,7 @@ public class Item
 
     public Transform View { get; private set; }
 
+    public float TargetScale { get; private set; } = 0.86f;
 
     public virtual void SetView()
     {
@@ -24,7 +25,17 @@ public class Item
             if (prefab)
             {
                 View = GameObject.Instantiate(prefab).transform;
+                View.localScale = new Vector3(TargetScale, TargetScale, 1f);
             }
+        }
+    }
+
+    public void SetCustomScale(float scale)
+    {
+        TargetScale = scale;
+        if (View != null)
+        {
+            View.localScale = new Vector3(scale, scale, 1f);
         }
     }
 
@@ -57,6 +68,47 @@ public class Item
         });
     }
 
+    internal void SlideToPosition(Vector3 targetPosition, float duration = 0.18f, Action onComplete = null)
+    {
+        if (View == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        View.DOKill();
+        View.DOMove(targetPosition, duration).SetEase(Ease.OutCubic).OnComplete(() =>
+        {
+            onComplete?.Invoke();
+        });
+    }
+
+    internal void FlyToPosition(Vector3 targetPosition, float duration = 0.28f, float jumpPower = 0.45f, float endScale = 0.86f, Action onComplete = null)
+    {
+        if (View == null)
+        {
+            onComplete?.Invoke();
+            return;
+        }
+
+        View.DOKill();
+        SetSortingLayerHigher();
+
+        View.DOScale(new Vector3(endScale, endScale, 1f), duration).SetEase(Ease.OutQuad);
+        View.DOJump(targetPosition, jumpPower, 1, duration)
+            .SetEase(Ease.OutQuad)
+            .OnComplete(() =>
+            {
+                SetSortingLayerLower();
+                if (View != null)
+                {
+                    float punchMagnitude = 0.14f * (endScale / 0.86f);
+                    View.DOPunchScale(new Vector3(punchMagnitude, -punchMagnitude, 0f), 0.16f, 5, 0.5f);
+                }
+                onComplete?.Invoke();
+            });
+    }
+
     internal void AnimationMoveToPosition()
     {
         if (Cell == null)
@@ -87,33 +139,31 @@ public class Item
     {
         if (View == null) return;
 
-        SpriteRenderer sp = View.GetComponent<SpriteRenderer>();
-        if (sp)
+        SpriteRenderer[] renderers = View.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
         {
-            sp.sortingOrder = 1;
+            renderers[i].sortingOrder = 15;
         }
     }
-
 
     public void SetSortingLayerLower()
     {
         if (View == null) return;
 
-        SpriteRenderer sp = View.GetComponent<SpriteRenderer>();
-        if (sp)
+        SpriteRenderer[] renderers = View.GetComponentsInChildren<SpriteRenderer>(true);
+        for (int i = 0; i < renderers.Length; i++)
         {
-            sp.sortingOrder = 0;
+            renderers[i].sortingOrder = 3;
         }
-
     }
 
-    internal void ShowAppearAnimation()
+    internal void ShowAppearAnimation(float delay = 0f)
     {
         if (View == null) return;
 
-        Vector3 scale = View.localScale;
-        View.localScale = Vector3.one * 0.1f;
-        View.DOScale(scale, 0.1f);
+        Vector3 targetScale = new Vector3(TargetScale, TargetScale, 1f);
+        View.localScale = Vector3.zero;
+        View.DOScale(targetScale, 0.25f).SetEase(Ease.OutBack).SetDelay(delay);
     }
 
     internal virtual bool IsSameType(Item other)
@@ -121,25 +171,31 @@ public class Item
         return false;
     }
 
-    internal virtual void ExplodeView()
+    internal virtual void ExplodeView(Action onComplete = null)
     {
-        if (View)
+        if (View == null)
         {
-            View.DOScale(Vector3.zero, 0.2f).OnComplete(
-                () =>
-                {
-                    if (View)
-                    {
-                        GameObject.Destroy(View.gameObject);
-                    }
-
-                    View = null;
-                }
-                );
+            onComplete?.Invoke();
+            return;
         }
+
+        View.DOKill();
+        SetSortingLayerHigher();
+        Vector3 currentScale = View.localScale;
+
+        Sequence seq = DOTween.Sequence();
+        seq.Append(View.DOScale(currentScale * 1.25f, 0.1f).SetEase(Ease.OutBack));
+        seq.Append(View.DOScale(Vector3.zero, 0.15f).SetEase(Ease.InBack));
+        seq.OnComplete(() =>
+        {
+            if (View)
+            {
+                GameObject.Destroy(View.gameObject);
+                View = null;
+            }
+            onComplete?.Invoke();
+        });
     }
-
-
 
     internal void AnimateForHint()
     {
@@ -163,6 +219,7 @@ public class Item
 
         if (View)
         {
+            View.DOKill();
             GameObject.Destroy(View.gameObject);
             View = null;
         }
